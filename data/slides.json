@@ -1,0 +1,20 @@
+{
+  "slideCount": 15,
+  "slides": [
+    { "index": 0,  "file": "pages/page1.html",  "title": "文字呼吸",   "description": "字体随鼠标靠近变形 — 字重、字距、倾斜实时响应",                    "url": "pages/page1.html" },
+    { "index": 1,  "file": "pages/page2.html",  "title": "涟漪水面",   "description": "点击产生涟漪波纹，滑动鼠标画出水痕",                            "url": "pages/page2.html" },
+    { "index": 2,  "file": "pages/page3.html",  "title": "藤蔓生长",   "description": "光标引导藤蔓生长方向，沿途绽放叶片",                            "url": "pages/page3.html" },
+    { "index": 3,  "file": "pages/page4.html",  "title": "星座连线",   "description": "鼠标靠近星点自动连接成星座图案",                                "url": "pages/page4.html" },
+    { "index": 4,  "file": "pages/page5.html",  "title": "枯山水",     "description": "鼠标滑动像耙子划过沙面，像素级纹理雕刻",                        "url": "pages/page5.html" },
+    { "index": 5,  "file": "pages/page6.html",  "title": "万花筒",     "description": "移动光标转动对称镜面，挥手改变反射瓣数",                        "url": "pages/page6.html" },
+    { "index": 6,  "file": "pages/page7.html",  "title": "光与影",     "description": "虚拟光源跟随鼠标，物体阴影实时偏移",                            "url": "pages/page7.html" },
+    { "index": 7,  "file": "pages/page8.html",  "title": "折纸",       "description": "点击折叠纸片，悬停展开，3D 翻折效果",                           "url": "pages/page8.html" },
+    { "index": 8,  "file": "pages/page9.html",  "title": "音流",       "description": "鼠标控制频谱频率，近处频段振幅升高，波形流动",                  "url": "pages/page9.html" },
+    { "index": 9,  "file": "pages/page10.html", "title": "编织",       "description": "光标像梭子穿梭，移动编织纬线与经线交织",                        "url": "pages/page10.html" },
+    { "index": 10, "file": "pages/page11.html", "title": "水彩晕染",   "description": "光标像湿笔刷，色彩在画布上晕开混合",                            "url": "pages/page11.html" },
+    { "index": 11, "file": "pages/page12.html", "title": "钟摆绘迹",   "description": "6 个钟摆绘制 Lissajous 曲线，支点向光标偏移",                  "url": "pages/page12.html" },
+    { "index": 12, "file": "pages/page13.html", "title": "云朵成形",   "description": "按住鼠标生成云朵，松手飘走，挥手起风",                          "url": "pages/page13.html" },
+    { "index": 13, "file": "pages/page14.html", "title": "磁力诗歌",   "description": "词语被光标磁场吸引聚集，挥手打散重组",                            "url": "pages/page14.html" },
+    { "index": 14, "file": "pages/page15.html", "title": "余晖渐变",   "description": "全屏渐变随鼠标偏移色温，呼吸式脉动",                            "url": "pages/page15.html" }
+  ]
+}

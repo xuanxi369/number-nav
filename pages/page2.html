@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>涟漪水面 · 第二页</title>
+<style>
+  :root{--bg:#f3f6f9;--text:#3a5060;--accent:#5b9ecf;--muted:#8aa0b0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none;cursor:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .info{text-align:center}
+  .info .num{font-size:6rem;font-weight:300;color:var(--accent);line-height:1;opacity:0.85}
+  .info .title{font-size:1.3rem;letter-spacing:0.08em;margin:8px 0}
+  .info .hint{font-size:0.8rem;color:var(--muted);letter-spacing:0.06em}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em;cursor:pointer}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0;box-shadow:0 0 6px rgba(140,201,160,0.5)}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="overlay"><div class="info"><div class="num">2</div><div class="title">涟漪水面</div><div class="hint">点击水面 · 滑动指尖</div></div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+  rs(); addEventListener('resize', rs);
+
+  // Ripple array
+  const ripples = [];
+  const MAX_RIPPLES = 40;
+
+  class Ripple {
+    constructor(x, y, strength) {
+      this.x = x; this.y = y;
+      this.radius = 0;
+      this.maxRadius = 80 + strength * 200;
+      this.strength = strength;
+      this.life = 1;
+      this.decay = 0.003 + (1-strength) * 0.012;
+    }
+    update() {
+      this.radius += 1.5 + this.strength * 4;
+      this.life -= this.decay;
+      return this.life > 0 && this.radius < this.maxRadius;
+    }
+  }
+
+  let mx = W/2, my = H/2, mot = 0;
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    // Subtle continuous ripple trail
+    if (Math.random() < 0.3) ripples.push(new Ripple(mx + (Math.random()-0.5)*20, my + (Math.random()-0.5)*20, 0.15));
+  });
+  document.addEventListener('click', e => {
+    for (let i = 0; i < 3; i++) {
+      ripples.push(new Ripple(e.clientX + (Math.random()-0.5)*40, e.clientY + (Math.random()-0.5)*40, 0.6 + Math.random()*0.4));
+    }
+  });
+
+  // Camera
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject = s; v.play();
+      camOk = true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent = '就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf = null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/500000,1)}
+        pf=f;
+        // Big gesture = splash!
+        if (mot > 0.6 && Math.random() < mot*0.3) {
+          ripples.push(new Ripple(W/2 + (Math.random()-0.5)*W*0.5, H/2 + (Math.random()-0.5)*H*0.5, mot));
+        }
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  function anim() {
+    ctx.clearRect(0, 0, W, H);
+    // Water surface base
+    const grad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H)*0.7);
+    grad.addColorStop(0, '#eef4f8'); grad.addColorStop(0.5, '#e6eef4'); grad.addColorStop(1, '#dce6ee');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+
+    // Draw ripples
+    ripples.forEach((r, i) => {
+      const alpha = r.life * 0.5;
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.radius, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(91,158,207,${alpha})`;
+      ctx.lineWidth = 1.5 * r.life;
+      ctx.stroke();
+      // Inner highlight
+      if (r.radius > 10) {
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.radius * 0.7, 0, Math.PI*2);
+        ctx.strokeStyle = `rgba(160,200,230,${alpha*0.6})`;
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+    });
+
+    // Clean up dead ripples
+    for (let i = ripples.length-1; i >= 0; i--) {
+      if (!ripples[i].update()) ripples.splice(i,1);
+    }
+    if (ripples.length > MAX_RIPPLES) ripples.splice(0, ripples.length - MAX_RIPPLES);
+
+    // Subtle cursor glow on water
+    ctx.beginPath();
+    ctx.arc(mx, my, 12, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fill();
+
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+</script>
+</body>
+</html>

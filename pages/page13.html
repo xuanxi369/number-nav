@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>云朵成形 · 第十三页</title>
+<style>
+  :root{--bg:#f4f7fa;--text:#3a4858;--accent:#8aacd0;--muted:#98a8b8}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:flex-start;justify-content:center;pointer-events:none;padding-top:40px}
+  .info{text-align:center}
+  .info .num{font-size:4rem;font-weight:300;color:var(--accent);line-height:1;opacity:0.7}
+  .info .title{font-size:1.1rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.7rem;color:var(--muted);letter-spacing:0.06em}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="overlay"><div class="info"><div class="num">13</div><div class="title">云朵成形</div><div class="hint">按住鼠标生成云 · 松手飘走 · 挥手起风</div></div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+  rs(); addEventListener('resize', rs);
+
+  const clouds = [];
+  let isHolding = false;
+  let holdX = 0, holdY = 0, holdSize = 0;
+  let mx = W/2, my = H/2, mot = 0;
+  let windX = 0, windY = 0;
+
+  document.addEventListener('mousedown', e => {
+    isHolding = true;
+    holdX = e.clientX; holdY = e.clientY; holdSize = 0;
+  });
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    if (isHolding) {
+      holdSize = Math.min(200, holdSize + 1.5);
+      holdX += (mx - holdX) * 0.2;
+      holdY += (my - holdY) * 0.2;
+    }
+  });
+  document.addEventListener('mouseup', () => {
+    if (isHolding && holdSize > 15) {
+      clouds.push({
+        x: holdX, y: holdY,
+        size: holdSize,
+        opacity: 0.7,
+        life: 1,
+        cloudParts: generateCloudParts(holdSize),
+      });
+    }
+    isHolding = false;
+    holdSize = 0;
+  });
+
+  function generateCloudParts(size) {
+    const parts = [];
+    const n = 8 + Math.floor(size * 0.3);
+    for (let i = 0; i < n; i++) {
+      parts.push({
+        rx: (Math.random() - 0.5) * size * 0.8,
+        ry: (Math.random() - 0.5) * size * 0.3,
+        rr: 10 + Math.random() * size * 0.35,
+      });
+    }
+    return parts;
+  }
+
+  // Camera → wind
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject=s; v.play();
+      camOk=true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent='就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf=null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/400000,1)}
+        pf=f;
+        windX += (Math.sin(Date.now()*0.003)*mot*3 - windX)*0.05;
+        windY += (Math.cos(Date.now()*0.005)*mot*1.5 - windY)*0.05;
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  function drawCloud(cx, cy, size, parts, opacity) {
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    // Main body
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, size*0.5, size*0.2, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Parts
+    parts.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(cx + p.rx, cy + p.ry, p.rr, 0, Math.PI*2);
+      ctx.fill();
+    });
+    // Soft edge blur via extra light strokes
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, size*0.6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function anim() {
+    ctx.clearRect(0, 0, W, H);
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#eef4fa'); grad.addColorStop(0.6, '#f4f7fa'); grad.addColorStop(1, '#fafcfd');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+
+    // Move existing clouds with wind
+    clouds.forEach(c => {
+      c.x += windX * (1 + c.size*0.005);
+      c.y += windY * (1 + c.size*0.005) - 0.1;
+      c.life -= 0.0003;
+      c.opacity = c.life * 0.7;
+      drawCloud(c.x, c.y, c.size, c.cloudParts, c.opacity);
+    });
+
+    // Remove dead clouds
+    for (let i = clouds.length-1; i >= 0; i--) {
+      if (clouds[i].life <= 0 || clouds[i].y < -200 || clouds[i].x > W+200 || clouds[i].x < -200) {
+        clouds.splice(i, 1);
+      }
+    }
+
+    // Growing cloud at cursor
+    if (isHolding && holdSize > 5) {
+      const parts = generateCloudParts(holdSize);
+      drawCloud(holdX, holdY, holdSize, parts, 0.6);
+    }
+
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+</script>
+</body>
+</html>

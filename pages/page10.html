@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>编织 · 第十页</title>
+<style>
+  :root{--bg:#f7f5f0;--text:#4a3c28;--accent:#8b7355;--muted:#b0a080}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:flex-start;justify-content:flex-end;pointer-events:none;padding:40px}
+  .info{text-align:right}
+  .info .num{font-size:5rem;font-weight:300;color:var(--accent);line-height:1;opacity:0.6}
+  .info .title{font-size:1.2rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.75rem;color:var(--muted);letter-spacing:0.06em}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="overlay"><div class="info"><div class="num">10</div><div class="title">编织</div><div class="hint">光标穿梭引线 · 挥手交织</div></div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+  rs(); addEventListener('resize', rs);
+
+  // Warp threads (vertical) — fixed
+  const warpCount = 30;
+  const warpX = [];
+  for (let i = 0; i < warpCount; i++) warpX.push((W/(warpCount+1))*(i+1));
+
+  // Weft threads (horizontal) — dynamically woven by mouse
+  const weftTrail = []; // {x, y, color}
+  const MAX_WEFT = 200;
+
+  let mx = W/2, my = H/2, mot = 0;
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    weftTrail.push({
+      x: mx, y: my,
+      color: ['#8b7355','#a08060','#c0a080','#9b8060','#b89870'][Math.floor(Math.random()*5)],
+    });
+    if (weftTrail.length > MAX_WEFT) weftTrail.shift();
+  });
+
+  // Camera → tangle/untangle
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject = s; v.play();
+      camOk = true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent = '就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf = null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/400000,1)}
+        pf=f;
+        // High motion → add more weft threads rapidly
+        if (mot > 0.5 && Math.random()<mot*0.4) {
+          weftTrail.push({
+            x: W*Math.random(), y: H*Math.random(),
+            color: ['#c4785a','#d8906b','#b87050'][Math.floor(Math.random()*3)],
+          });
+        }
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  function anim() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#f7f5f0'; ctx.fillRect(0, 0, W, H);
+
+    // Draw warp threads (vertical — fixed loom)
+    warpX.forEach(wx => {
+      ctx.beginPath();
+      ctx.moveTo(wx, 0);
+      ctx.lineTo(wx, H);
+      ctx.strokeStyle = 'rgba(139,115,85,0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 8]);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    // Draw weft threads (horizontal — woven by mouse)
+    if (weftTrail.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(weftTrail[0].x, weftTrail[0].y);
+      for (let i = 1; i < weftTrail.length; i++) {
+        const prev = weftTrail[i-1], curr = weftTrail[i];
+        // Interlacing effect: weave over/under warp threads
+        const midX = (prev.x + curr.x) / 2;
+        const midY = (prev.y + curr.y) / 2;
+        // Offset based on which warp thread we're near
+        warpX.forEach(wx => {
+          if (Math.abs(midX - wx) < 15) {
+            weftTrail[i].y += Math.sin(i*0.5)*0.3; // subtle weave
+          }
+        });
+        ctx.lineTo(curr.x, curr.y);
+      }
+      ctx.strokeStyle = 'rgba(139,115,85,0.5)';
+      ctx.lineWidth = 2 + mot;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Weave points along trail
+      for (let i = 0; i < weftTrail.length; i += 5) {
+        const p = weftTrail[i];
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2 + mot*3, 0, Math.PI*2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = 0.6;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Cursor — the "shuttle"
+    ctx.beginPath();
+    ctx.arc(mx, my, 5 + mot*3, 0, Math.PI*2);
+    ctx.fillStyle = '#8b7355';
+    ctx.globalAlpha = 0.7;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+</script>
+</body>
+</html>

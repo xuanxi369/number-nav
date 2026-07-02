@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>交互美学幻灯片 - 3D轮盘</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+      color: #2c3e50;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      perspective: 2000px;
+      perspective-origin: 50% 50%;
+      position: fixed;
+      touch-action: pan-y;
+    }
+
+    /* 3D轮盘容器 */
+    .carousel-3d {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transition: transform 1.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .carousel-3d.dragging {
+      transition: none;
+    }
+
+    /* 每个幻灯片卡片 - 响应式尺寸 */
+    .slide-card {
+      position: absolute;
+      width: min(1100px, 85vw);
+      height: min(600px, 55vh);
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) rotateX(var(--a, 0deg)) translateZ(var(--r, 1400px));
+      background: #ffffff;
+      border-radius: clamp(16px, 3vw, 28px);
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+      transform-style: preserve-3d;
+      backface-visibility: hidden;
+      display: flex;
+      overflow: hidden;
+      transition: transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.4s, box-shadow 0.4s;
+    }
+
+    .carousel-3d.dragging .slide-card {
+      transition: opacity 0.4s, box-shadow 0.4s;
+    }
+
+    .slide-card:hover {
+      box-shadow: 0 16px 64px rgba(0, 0, 0, 0.18);
+    }
+
+    /* 中心卡片：上浮放大 */
+    .slide-card.center {
+      transform: translate(-50%, -50%) rotateX(var(--a)) translateZ(calc(var(--r) + 250px)) scale(1.10) !important;
+      box-shadow: 0 32px 96px rgba(0, 0, 0, 0.25);
+      z-index: 100;
+    }
+
+    /* 左侧信息栏 */
+    .slide-sidebar {
+      width: clamp(100px, 20%, 200px);
+      background: linear-gradient(180deg, #fef3c7 0%, #fce7f3 100%);
+      padding: clamp(20px, 4vw, 40px) clamp(12px, 3vw, 24px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      border-right: 3px solid;
+      border-image: linear-gradient(180deg, #f59e0b 0%, #ec4899 100%) 1;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .slide-number {
+      font-size: clamp(40px, 8vw, 80px);
+      font-weight: 700;
+      background: linear-gradient(135deg, #f59e0b, #ec4899);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+      margin-bottom: clamp(10px, 2vw, 20px);
+    }
+
+    .slide-title {
+      font-size: clamp(0.9rem, 2vw, 1.5rem);
+      font-weight: 600;
+      color: #1e293b;
+      letter-spacing: 0.05em;
+      line-height: 1.4;
+      word-break: keep-all;
+    }
+
+    /* 右侧内容区 */
+    .slide-content {
+      flex: 1;
+      position: relative;
+      background: #f8fafc;
+      overflow: hidden;
+    }
+
+    .slide-content iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+      transition: filter 0.5s;
+    }
+
+    .slide-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #f5f7fa, #e8ecf1);
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+
+    /* 磨砂玻璃：非中心卡片模糊 */
+    .slide-card:not(.center) .slide-content iframe {
+      filter: blur(10px);
+      pointer-events: none;
+    }
+
+    .slide-card:not(.center) .slide-content::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(248, 250, 252, 0.45);
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .slide-card.center .slide-content {
+      pointer-events: auto;
+    }
+
+    /* 导航按钮 */
+    .nav-btn {
+      position: fixed;
+      right: clamp(20px, 4vw, 40px);
+      z-index: 1000;
+      width: clamp(48px, 8vw, 64px);
+      height: clamp(48px, 8vw, 64px);
+      background: #ffffff;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .nav-btn:hover, .nav-btn:active {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .nav-btn.prev { top: clamp(20px, 4vw, 40px); }
+    .nav-btn.next { bottom: clamp(20px, 4vw, 40px); }
+
+    .nav-btn svg {
+      width: clamp(20px, 4vw, 24px);
+      height: clamp(20px, 4vw, 24px);
+      fill: #1e293b;
+    }
+
+    /* 页码指示器 */
+    .page-indicator {
+      position: fixed;
+      bottom: clamp(20px, 4vw, 40px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      font-size: clamp(0.8rem, 2vw, 0.9rem);
+      color: #64748b;
+      font-weight: 500;
+      background: rgba(255, 255, 255, 0.95);
+      padding: clamp(8px, 2vw, 12px) clamp(16px, 4vw, 28px);
+      border-radius: 24px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    }
+
+    .page-indicator .current {
+      color: #f59e0b;
+      font-weight: 700;
+      font-size: clamp(1rem, 2.5vw, 1.2rem);
+    }
+
+    /* 提示文字 */
+    .hint {
+      position: fixed;
+      top: clamp(20px, 4vw, 40px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      font-size: clamp(0.75rem, 1.8vw, 0.85rem);
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.9);
+      padding: clamp(8px, 2vw, 10px) clamp(12px, 3vw, 20px);
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      white-space: nowrap;
+      max-width: 90vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* iPad 竖屏优化 */
+    @media (max-width: 1024px) and (orientation: portrait) {
+      body {
+        perspective: 1500px;
+      }
+      .slide-card {
+        width: 85vw;
+        height: 50vh;
+      }
+      .slide-card.center {
+        transform: translate(-50%, -50%) rotateX(var(--a)) translateZ(calc(var(--r) + 150px)) scale(1.08) !important;
+      }
+    }
+
+    /* 手机横屏 */
+    @media (max-width: 896px) and (orientation: landscape) {
+      body {
+        perspective: 1200px;
+      }
+      .slide-card {
+        width: 65vw;
+        height: 68vh;
+      }
+      .slide-sidebar {
+        width: 100px;
+      }
+      .slide-number {
+        font-size: 55px;
+      }
+      .slide-title {
+        font-size: 1.1rem;
+      }
+      .slide-card.center {
+        transform: translate(-50%, -50%) rotateX(var(--a)) translateZ(calc(var(--r) + 100px)) scale(1.05) !important;
+      }
+      .hint {
+        font-size: 0.7rem;
+      }
+      .nav-btn {
+        width: 50px;
+        height: 50px;
+      }
+      .page-indicator {
+        font-size: 0.8rem;
+        padding: 8px 16px;
+      }
+    }
+
+    /* 手机竖屏 */
+    @media (max-width: 768px) and (orientation: portrait) {
+      body {
+        perspective: 1000px;
+      }
+      .slide-card {
+        width: 92vw;
+        height: min(500px, 60vh);
+        max-height: 60vh;
+      }
+      .slide-sidebar {
+        width: 80px;
+        padding: 20px 10px;
+      }
+      .slide-number {
+        font-size: 50px;
+        margin-bottom: 12px;
+      }
+      .slide-title {
+        font-size: 1rem;
+      }
+      .slide-card.center {
+        transform: translate(-50%, -50%) rotateX(var(--a)) translateZ(calc(var(--r) + 80px)) scale(1.04) !important;
+      }
+      .nav-btn {
+        width: 50px;
+        height: 50px;
+        right: 12px;
+      }
+      .nav-btn.prev { top: 12px; }
+      .nav-btn.next { bottom: 80px; }
+      .page-indicator {
+        bottom: 15px;
+        padding: 8px 16px;
+        font-size: 0.8rem;
+      }
+      .hint {
+        display: none;
+      }
+    }
+
+    /* 超小屏幕 */
+    @media (max-width: 480px) {
+      body {
+        perspective: 900px;
+      }
+      .slide-card {
+        width: 94vw;
+        height: min(450px, 55vh);
+        max-height: 55vh;
+      }
+      .slide-sidebar {
+        width: 70px;
+        padding: 16px 8px;
+      }
+      .slide-number {
+        font-size: 42px;
+      }
+      .slide-title {
+        font-size: 0.85rem;
+      }
+      .page-indicator {
+        font-size: 0.75rem;
+        padding: 6px 14px;
+        bottom: 12px;
+      }
+      .nav-btn {
+        width: 46px;
+        height: 46px;
+      }
+      .nav-btn.next {
+        bottom: 70px;
+      }
+    }
+
+    /* iPhone SE/小屏专用 */
+    @media (max-width: 375px) {
+      body {
+        perspective: 800px;
+      }
+      .slide-card {
+        width: 96vw;
+        height: min(400px, 52vh);
+        max-height: 52vh;
+      }
+      .slide-sidebar {
+        width: 65px;
+        padding: 12px 6px;
+      }
+      .slide-number {
+        font-size: 38px;
+        margin-bottom: 8px;
+      }
+      .slide-title {
+        font-size: 0.8rem;
+      }
+      .slide-card.center {
+        transform: translate(-50%, -50%) rotateX(var(--a)) translateZ(calc(var(--r) + 60px)) scale(1.03) !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="carousel-3d" id="carousel3d"></div>
+
+  <!-- 导航按钮 -->
+  <button class="nav-btn prev" id="prevBtn" aria-label="上一页">
+    <svg viewBox="0 0 24 24"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+  </button>
+  <button class="nav-btn next" id="nextBtn" aria-label="下一页">
+    <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+  </button>
+
+  <!-- 页码 -->
+  <div class="page-indicator">
+    <span class="current" id="currentPage">1</span> / <span id="totalPages">15</span>
+  </div>
+
+  <!-- 提示 -->
+  <div class="hint">拖拽旋转 | 滑动切换 | 滚轮切换 | 键盘方向键</div>
+
+  <script>
+    (() => {
+      const slides = [
+        { i: 0, t: "文字呼吸", u: "pages/page1.html" },
+        { i: 1, t: "涟漪水面", u: "pages/page2.html" },
+        { i: 2, t: "藤蔓生长", u: "pages/page3.html" },
+        { i: 3, t: "星座连线", u: "pages/page4.html" },
+        { i: 4, t: "枯山水", u: "pages/page5.html" },
+        { i: 5, t: "万花筒", u: "pages/page6.html" },
+        { i: 6, t: "光与影", u: "pages/page7.html" },
+        { i: 7, t: "折纸", u: "pages/page8.html" },
+        { i: 8, t: "音流", u: "pages/page9.html" },
+        { i: 9, t: "编织", u: "pages/page10.html" },
+        { i: 10, t: "水彩晕染", u: "pages/page11.html" },
+        { i: 11, t: "钟摆绘迹", u: "pages/page12.html" },
+        { i: 12, t: "云朵成形", u: "pages/page13.html" },
+        { i: 13, t: "磁力诗歌", u: "pages/page14.html" },
+        { i: 14, t: "余晖渐变", u: "pages/page15.html" }
+      ];
+
+      const N = slides.length;
+      const theta = 360 / N;
+      
+      // 根据屏幕方向动态调整半径
+      function getRadius() {
+        const isLandscape = window.innerWidth > window.innerHeight;
+        const isMobile = window.innerWidth <= 896;
+        if (isMobile && isLandscape) {
+          return 800; // 手机横屏：更小的半径，卡片更紧凑
+        }
+        return 1400; // 默认半径
+      }
+      
+      let radius = getRadius();
+      const getCI = nr => Math.round((360 - nr % 360) / theta) % N;
+      const carousel = document.getElementById('carousel3d');
+      const cpEl = document.getElementById('currentPage');
+      const tpEl = document.getElementById('totalPages');
+      tpEl.textContent = N;
+
+      let cr = 0; // 当前旋转角度
+      let tr = 0; // 目标旋转角度
+      let drag = false;
+      let sy = 0;
+      let sr = 0;
+      let prevC = -1;
+
+      // 阻尼系数（越小越有阻尼感，0.05-0.15 之间）
+      const DAMPING = 0.08;
+
+      // 创建卡片
+      slides.forEach((s, i) => {
+        const card = document.createElement('div');
+        card.className = 'slide-card';
+        card.dataset.index = i;
+        const a = theta * i;
+        card.style.setProperty('--a', a + 'deg');
+        card.style.setProperty('--r', radius + 'px');
+        card.innerHTML = `
+          <div class="slide-sidebar">
+            <div class="slide-number">${String(i + 1).padStart(2, '0')}</div>
+            <div class="slide-title">${s.t}</div>
+          </div>
+          <div class="slide-content">
+            <div class="slide-loading">加载中...</div>
+            <iframe src="${s.u}" loading="lazy"></iframe>
+          </div>
+        `;
+        const iframe = card.querySelector('iframe');
+        const loading = card.querySelector('.slide-loading');
+        iframe.onload = () => { if (loading) loading.style.display = 'none'; };
+        carousel.appendChild(card);
+      });
+
+      // 监听屏幕方向变化，更新半径
+      window.addEventListener('resize', () => {
+        const newRadius = getRadius();
+        if (newRadius !== radius) {
+          radius = newRadius;
+          const cards = carousel.querySelectorAll('.slide-card');
+          cards.forEach(c => c.style.setProperty('--r', radius + 'px'));
+        }
+      });
+
+      // 更新旋转和透明度
+      function upd() {
+        carousel.style.transform = `translateZ(-${radius}px) rotateX(${cr}deg)`;
+        const nr = ((cr % 360) + 360) % 360;
+        const ci = getCI(nr);
+        cpEl.textContent = ci + 1;
+
+        // 更新中心卡片
+        if (ci !== prevC) {
+          const cards = carousel.querySelectorAll('.slide-card');
+          cards.forEach(c => c.classList.remove('center'));
+          if (cards[ci]) cards[ci].classList.add('center');
+          prevC = ci;
+        }
+
+        // 更新透明度
+        const cards = carousel.querySelectorAll('.slide-card');
+        cards.forEach((c, i) => {
+          const ca = theta * i;
+          const na = ((ca % 360) + 360) % 360;
+          let wa = (na + nr) % 360;
+          if (wa > 180) wa = 360 - wa;
+          c.style.opacity = 1 - (wa / 180) * 0.3;
+        });
+      }
+
+      // 带阻尼的动画循环
+      function anim() {
+        const d = tr - cr;
+        if (Math.abs(d) > 0.1) {
+          cr += d * DAMPING; // 使用阻尼系数
+          upd();
+        }
+        requestAnimationFrame(anim);
+      }
+      anim();
+      upd();
+
+      // 旋转到指定索引
+      function rt(idx) {
+        const cn = ((cr % 360) + 360) % 360;
+        const ci = getCI(cn);
+        let di = idx - ci;
+        if (di > N / 2) di -= N;
+        else if (di < -N / 2) di += N;
+        tr = cr - di * theta;
+      }
+
+      // 按钮导航
+      // 上箭头按钮 - 向上滚动（显示下一张）
+      document.getElementById('prevBtn').onclick = () => {
+        const nr = ((cr % 360) + 360) % 360;
+        const ci = getCI(nr);
+        rt((ci + 1) % N);  // 修正：向上滚动显示下一张
+      };
+
+      // 下箭头按钮 - 向下滚动（显示上一张）
+      document.getElementById('nextBtn').onclick = () => {
+        const nr = ((cr % 360) + 360) % 360;
+        const ci = getCI(nr);
+        rt((ci - 1 + N) % N);  // 修正：向下滚动显示上一张
+      };
+
+      // 鼠标拖拽
+      document.addEventListener('mousedown', e => {
+        drag = true;
+        sy = e.clientY;
+        sr = cr;
+        carousel.classList.add('dragging');
+      });
+
+      document.addEventListener('mousemove', e => {
+        if (!drag) return;
+        cr = sr + (e.clientY - sy) * 0.2;
+        tr = cr;
+        upd();
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (!drag) return;
+        drag = false;
+        carousel.classList.remove('dragging');
+        prevC = -1;
+        const nr = ((cr % 360) + 360) % 360;
+        const ni = getCI(nr);
+        let ta = (360 - ni * theta % 360) % 360;
+        let d = ta - nr;
+        while (d > 180) d -= 360;
+        while (d < -180) d += 360;
+        tr = cr + d;
+      });
+
+      // 触摸拖拽（原有功能 - 连续旋转）
+      let touchStartY = 0;
+      let touchStartTime = 0;
+      let isTouchDrag = false;
+      
+      document.addEventListener('touchstart', e => {
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+        isTouchDrag = false;
+        
+        drag = true;
+        sy = e.touches[0].clientY;
+        sr = cr;
+        carousel.classList.add('dragging');
+      }, { passive: true });
+
+      document.addEventListener('touchmove', e => {
+        if (!drag) return;
+        
+        const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
+        
+        // 如果移动距离超过10px，认为是拖拽
+        if (deltaY > 10) {
+          isTouchDrag = true;
+        }
+        
+        cr = sr + (e.touches[0].clientY - sy) * 0.2;
+        tr = cr;
+        upd();
+      }, { passive: true });
+
+      document.addEventListener('touchend', e => {
+        if (!drag) return;
+        drag = false;
+        carousel.classList.remove('dragging');
+        prevC = -1;
+        
+        const touchEndY = e.changedTouches[0].clientY;
+        const touchDuration = Date.now() - touchStartTime;
+        const deltaY = touchEndY - touchStartY;
+        
+        // 判断是快速滑动还是拖拽
+        const isSwipe = !isTouchDrag && touchDuration < 300 && Math.abs(deltaY) > 50;
+        
+        if (isSwipe) {
+          // 快速滑动 - 切换到下一张/上一张
+          const nr = ((cr % 360) + 360) % 360;
+          const ci = getCI(nr);
+          
+          if (deltaY > 0) {
+            // 向下滑动 - 显示上一张
+            rt((ci - 1 + N) % N);
+          } else {
+            // 向上滑动 - 显示下一张
+            rt((ci + 1) % N);
+          }
+        } else {
+          // 拖拽 - 吸附到最近的卡片
+          const nr = ((cr % 360) + 360) % 360;
+          const ni = getCI(nr);
+          let ta = (360 - ni * theta % 360) % 360;
+          let d = ta - nr;
+          while (d > 180) d -= 360;
+          while (d < -180) d += 360;
+          tr = cr + d;
+        }
+      });
+
+      // 滚轮
+      let wt;
+      document.addEventListener('wheel', e => {
+        e.preventDefault();
+        clearTimeout(wt);
+        wt = setTimeout(() => {
+          const nr = ((cr % 360) + 360) % 360;
+          const ci = getCI(nr);
+          if (e.deltaY > 30) rt((ci + 1) % N);
+          if (e.deltaY < -30) rt((ci - 1 + N) % N);
+        }, 50);
+      }, { passive: false });
+
+      // 键盘
+      document.addEventListener('keydown', e => {
+        const nr = ((cr % 360) + 360) % 360;
+        const ci = getCI(nr);
+        if (e.key === 'ArrowUp') rt((ci - 1 + N) % N);
+        if (e.key === 'ArrowDown') rt((ci + 1) % N);
+      });
+    })();
+  </script>
+</body>
+</html>

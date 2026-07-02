@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>磁力诗歌 · 第十四页</title>
+<style>
+  :root{--bg:#f0e8dc;--text:#4a3c28;--accent:#c09060;--muted:#b8a080}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none}
+  .words-container{position:fixed;inset:0;z-index:0}
+  .word{
+    position:absolute;
+    font-size:1.4rem;letter-spacing:0.05em;color:var(--text);
+    transition:transform 0.15s ease-out,color 0.3s ease;
+    cursor:default;pointer-events:none;
+    white-space:nowrap;
+  }
+  .word.near{color:var(--accent);font-weight:600}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:flex-end;justify-content:center;pointer-events:none;padding-bottom:48px}
+  .info{text-align:center}
+  .info .num{font-size:4rem;font-weight:300;color:var(--accent);line-height:1;opacity:0.7}
+  .info .title{font-size:1.1rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.7rem;color:var(--muted);letter-spacing:0.06em}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<div class="words-container" id="container"></div>
+<div class="overlay"><div class="info"><div class="num">14</div><div class="title">磁力诗歌</div><div class="hint">词语被光标吸引 · 挥手打散重组</div></div></div>
+
+<script>
+(() => {
+  const container = document.getElementById('container');
+  const poem = [
+    '月光','落在','左手上','风','穿过','树叶','沉默','是一首','未完的','诗',
+    '时间','慢慢','走','云','飘过','山岗','你','在远方','听','雨声',
+    '春天','来了','又走','花','开了','又谢','我','在等','一个','回音',
+    '河流','去向','大海','星星','照在','窗前','梦','悄悄','醒'
+  ];
+  const words = [];
+  let mx = -200, my = -200, mot = 0;
+
+  function init() {
+    container.innerHTML = '';
+    words.length = 0;
+    poem.forEach(text => {
+      const el = document.createElement('span');
+      el.className = 'word';
+      el.textContent = text;
+      el.style.left = (50 + Math.random()*window.innerWidth*0.8) + 'px';
+      el.style.top = (50 + Math.random()*window.innerHeight*0.8) + 'px';
+      container.appendChild(el);
+      words.push({
+        el,
+        x: parseFloat(el.style.left),
+        y: parseFloat(el.style.top),
+        baseX: parseFloat(el.style.left),
+        baseY: parseFloat(el.style.top),
+        vx: 0, vy: 0,
+      });
+    });
+  }
+  init();
+  addEventListener('resize', () => {
+    words.forEach(w => {
+      w.baseX = Math.random()*window.innerWidth*0.8 + 50;
+      w.baseY = Math.random()*window.innerHeight*0.8 + 50;
+    });
+  });
+
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+
+  // Camera → scatter
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject=s; v.play();
+      camOk=true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent='就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf=null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/400000,1)}
+        pf=f;
+        // Scatter on high motion
+        if(mot>0.5) {
+          words.forEach(w => {
+            w.vx += (Math.random()-0.5)*mot*20;
+            w.vy += (Math.random()-0.5)*mot*20;
+          });
+        }
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  function anim() {
+    words.forEach(w => {
+      const dx = w.x - mx, dy = w.y - my;
+      const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+
+      // Magnetic attraction to cursor
+      if (dist < 200) {
+        const force = (200-dist)/200;
+        w.vx += (dx/dist)*force*0.8;
+        w.vy += (dy/dist)*force*0.8;
+        w.el.classList.add('near');
+      } else {
+        w.el.classList.remove('near');
+      }
+
+      // Spring back to base position
+      w.vx += (w.baseX - w.x)*0.005;
+      w.vy += (w.baseY - w.y)*0.005;
+
+      // Damping
+      w.vx *= 0.92;
+      w.vy *= 0.92;
+
+      w.x += w.vx;
+      w.y += w.vy;
+
+      // Clamp
+      w.x = Math.max(-20, Math.min(window.innerWidth+20, w.x));
+      w.y = Math.max(-20, Math.min(window.innerHeight+20, w.y));
+
+      w.el.style.transform = `translate(${w.x - parseFloat(w.el.style.left)}px, ${w.y - parseFloat(w.el.style.top)}px)`;
+    });
+
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+</script>
+</body>
+</html>

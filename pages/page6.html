@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>万花筒 · 第六页</title>
+<style>
+  :root{--bg:#f0e8dc;--text:#4a3828;--accent:#d4956b;--muted:#b89878}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none;cursor:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .vignette{position:fixed;inset:0;z-index:2;pointer-events:none;box-shadow:inset 0 0 150px rgba(250,246,240,0.8)}
+  .info{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:3;text-align:center;pointer-events:none}
+  .info .num{font-size:3rem;font-weight:300;color:var(--accent);opacity:0.8;line-height:1}
+  .info .title{font-size:1rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.7rem;color:var(--muted);letter-spacing:0.06em}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="vignette"></div>
+<div class="info"><div class="num">6</div><div class="title">万花筒</div><div class="hint">移动光标转动镜面 · 挥手改变瓣数</div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+  rs(); addEventListener('resize', rs);
+
+  let mx = W/2, my = H/2, mot = 0;
+  let slices = 8; // Number of kaleidoscope slices
+  let rotation = 0;
+
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+
+  // Camera controls slice count
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject = s; v.play();
+      camOk = true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent = '就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf = null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/400000,1)}
+        pf=f;
+        slices = Math.round(3 + mot * 18); // 3-21 slices
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  // Generate decorative "shards" that get mirrored
+  const shards = [];
+  for (let i = 0; i < 15; i++) {
+    shards.push({
+      angle: Math.random() * Math.PI * 2,
+      dist: 20 + Math.random() * 180,
+      size: 3 + Math.random() * 12,
+      color: ['#d4956b','#e8b898','#c8a080','#f0c8a0','#d4a888'][Math.floor(Math.random()*5)],
+      speed: (Math.random()-0.5) * 0.003,
+      shape: Math.floor(Math.random()*3), // 0=circle, 1=rect, 2=diamond
+    });
+  }
+
+  function drawSlice(angleOffset) {
+    ctx.save();
+    const cx = W/2, cy = H/2;
+    ctx.translate(cx, cy);
+    ctx.rotate(angleOffset);
+
+    // Draw clip wedge
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, Math.max(W,H), 0, Math.PI*2/slices);
+    ctx.closePath();
+    ctx.clip();
+
+    // Draw shards
+    shards.forEach(s => {
+      const x = Math.cos(s.angle) * s.dist;
+      const y = Math.sin(s.angle) * s.dist;
+      ctx.fillStyle = s.color;
+      ctx.globalAlpha = 0.7;
+
+      if (s.shape === 0) {
+        ctx.beginPath();
+        ctx.arc(x, y, s.size, 0, Math.PI*2);
+        ctx.fill();
+      } else if (s.shape === 1) {
+        ctx.fillRect(x-s.size, y-s.size*0.6, s.size*2, s.size*1.2);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(x, y-s.size);
+        ctx.lineTo(x+s.size, y);
+        ctx.lineTo(x, y+s.size);
+        ctx.lineTo(x-s.size, y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    });
+
+    ctx.restore();
+  }
+
+  function anim() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#faf6f0'; ctx.fillRect(0, 0, W, H);
+
+    const cx = W/2, cy = H/2;
+    rotation += (mx - cx) * 0.0001;
+
+    // Update shard positions based on mouse
+    shards.forEach(s => {
+      s.angle += s.speed;
+      s.dist += (Math.sin(Date.now()*0.001 + s.angle)*2 - (s.dist - 100)*0.01);
+    });
+
+    // Draw all kaleidoscope slices
+    const anglePerSlice = Math.PI*2 / slices;
+    for (let i = 0; i < slices; i++) {
+      drawSlice(rotation + anglePerSlice * i);
+    }
+
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+</script>
+</body>
+</html>

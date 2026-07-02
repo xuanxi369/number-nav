@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>钟摆绘迹 · 第十二页</title>
+<style>
+  :root{--bg:#faf9f7;--text:#3a3840;--accent:#6b6090;--muted:#9890a8}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:flex-end;justify-content:flex-start;pointer-events:none;padding:40px}
+  .info{text-align:left}
+  .info .num{font-size:5rem;font-weight:300;color:var(--accent);line-height:1;opacity:0.7}
+  .info .title{font-size:1.2rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.75rem;color:var(--muted);letter-spacing:0.06em}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="overlay"><div class="info"><div class="num">12</div><div class="title">钟摆绘迹</div><div class="hint">光标改变支点 · 挥手摆动</div></div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+  rs(); addEventListener('resize', rs);
+
+  // Multiple pendulums drawing Lissajous-like curves
+  const pendulums = [];
+  const colors = ['#6b6090','#8b80a8','#a098c0','#7b70a0','#9088b8','#b0a8d0'];
+
+  for (let i = 0; i < 6; i++) {
+    pendulums.push({
+      angleX: Math.random() * Math.PI * 2,
+      angleY: Math.random() * Math.PI * 2,
+      speedX: 0.008 + Math.random() * 0.025,
+      speedY: 0.01 + Math.random() * 0.03,
+      amplitudeX: 60 + Math.random() * 180,
+      amplitudeY: 60 + Math.random() * 180,
+      color: colors[i % colors.length],
+      trail: [],
+      maxTrail: 300,
+    });
+  }
+
+  let mx = W/2, my = H/2, mot = 0;
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject=s; v.play();
+      camOk=true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent='就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf=null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/400000,1)}
+        pf=f;
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  function anim() {
+    // Slow fade for trail effect
+    ctx.fillStyle = 'rgba(250,249,247,0.15)';
+    ctx.fillRect(0, 0, W, H);
+
+    const cx = W/2, cy = H/2;
+
+    pendulums.forEach((p, pi) => {
+      // Mouse influences pivot point
+      const pivotX = cx + (mx - cx) * (0.1 + pi * 0.1);
+      const pivotY = cy + (my - cy) * (0.1 + pi * 0.1);
+
+      // Gesture increases amplitude/speed
+      p.angleX += p.speedX * (1 + mot * 3);
+      p.angleY += p.speedY * (1 + mot * 3);
+
+      const ampX = p.amplitudeX * (1 + mot * 0.5);
+      const ampY = p.amplitudeY * (1 + mot * 0.5);
+
+      const x = pivotX + Math.sin(p.angleX) * ampX;
+      const y = pivotY + Math.cos(p.angleY) * ampY;
+
+      p.trail.push({x, y});
+      if (p.trail.length > p.maxTrail) p.trail.shift();
+
+      // Draw trail
+      if (p.trail.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(p.trail[0].x, p.trail[0].y);
+        for (let i = 1; i < p.trail.length; i++) {
+          ctx.lineTo(p.trail[i].x, p.trail[i].y);
+        }
+        ctx.strokeStyle = p.color;
+        ctx.globalAlpha = 0.5;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+
+      // Draw bob
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI*2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = 0.8;
+      ctx.fill();
+
+      // Pivot point
+      ctx.beginPath();
+      ctx.arc(pivotX, pivotY, 2, 0, Math.PI*2);
+      ctx.fillStyle = '#ccc';
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+</script>
+</body>
+</html>

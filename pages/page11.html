@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>水彩晕染 · 第十一页</title>
+<style>
+  :root{--bg:#f0e8e0;--text:#4a3c30;--accent:#d4786a;--muted:#b89888}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:flex-end;justify-content:center;pointer-events:none;padding-bottom:48px}
+  .info{text-align:center}
+  .info .num{font-size:5rem;font-weight:300;color:var(--accent);line-height:1;opacity:0.8}
+  .info .title{font-size:1.2rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.75rem;color:var(--muted);letter-spacing:0.06em}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="overlay"><div class="info"><div class="num">11</div><div class="title">水彩晕染</div><div class="hint">光标处色彩晕开 · 挥手泼溅</div></div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;initPaper()}
+  rs(); addEventListener('resize', rs);
+
+  const palette = ['#d4786a','#e89880','#c89078','#e8b098','#d4a090','#f0b8a0','#c8a890','#e0c0a8'];
+  let mx = -200, my = -200, pmx = -200, pmy = -200, mot = 0;
+  let lastDrop = 0;
+
+  function initPaper() {
+    ctx.fillStyle = '#faf8f5'; ctx.fillRect(0, 0, W, H);
+    // Subtle paper texture
+    for (let i=0;i<2000;i++) {
+      ctx.fillStyle = `rgba(200,190,180,${Math.random()*0.03})`;
+      ctx.fillRect(Math.random()*W, Math.random()*H, 2, 2);
+    }
+  }
+
+  document.addEventListener('mousemove', e => {
+    pmx = mx; pmy = my;
+    mx = e.clientX; my = e.clientY;
+    // Continuous brush stroke
+    if (pmx > 0) brushStroke(pmx, pmy, mx, my, 0.3);
+    // Occasional color drop
+    const now = Date.now();
+    if (now - lastDrop > 300) {
+      lastDrop = now;
+      addWash(mx, my, 30 + Math.random()*40, palette[Math.floor(Math.random()*palette.length)]);
+    }
+  });
+
+  function brushStroke(x1, y1, x2, y2, intensity) {
+    const steps = Math.ceil(Math.sqrt((x2-x1)**2+(y2-y1)**2)/3);
+    for (let s=0;s<=steps;s++) {
+      const t = s/steps;
+      const bx = x1+(x2-x1)*t + (Math.random()-0.5)*8;
+      const by = y1+(y2-y1)*t + (Math.random()-0.5)*8;
+      const grad = ctx.createRadialGradient(bx, by, 0, bx, by, 6+intensity*8);
+      const color = palette[Math.floor(Math.random()*3)];
+      grad.addColorStop(0, color.replace(')', `,${0.15*intensity})`).replace('rgb','rgba'));
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(bx, by, 6+intensity*8, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  function addWash(cx, cy, radius, color) {
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    const base = color.startsWith('#') ? hexToRgb(color) : {r:212,g:120,b:106};
+    grad.addColorStop(0, `rgba(${base.r},${base.g},${base.b},0.12)`);
+    grad.addColorStop(0.3, `rgba(${base.r},${base.g},${base.b},0.06)`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI*2); ctx.fill();
+  }
+
+  function hexToRgb(h) {
+    const v = parseInt(h.slice(1),16);
+    return {r:(v>>16)&255, g:(v>>8)&255, b:v&255};
+  }
+
+  // Camera → splash
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject=s; v.play();
+      camOk=true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent='就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf=null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/500000,1)}
+        pf=f;
+        if(mot>0.6 && Math.random()<mot*0.3) {
+          for(let i=0;i<3;i++) {
+            const cx = W*(0.2+Math.random()*0.6);
+            const cy = H*(0.2+Math.random()*0.6);
+            addWash(cx, cy, 50+mot*100, palette[Math.floor(Math.random()*palette.length)]);
+          }
+        }
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  // Fade over time for watercolor feel
+  setInterval(() => {
+    const imgData = ctx.getImageData(0,0,W,H);
+    const d = imgData.data;
+    for (let i=0;i<d.length;i+=4) {
+      d[i] = d[i]*0.999 + 250*0.001;
+      d[i+1] = d[i+1]*0.999 + 248*0.001;
+      d[i+2] = d[i+2]*0.999 + 245*0.001;
+    }
+    ctx.putImageData(imgData,0,0);
+  }, 200);
+})();
+</script>
+</body>
+</html>

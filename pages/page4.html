@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>星座连线 · 第四页</title>
+<style>
+  :root{--bg:#f9f8fb;--text:#3a3850;--accent:#6b5c9e;--muted:#9888a8}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:flex-start;justify-content:center;pointer-events:none;padding-top:60px}
+  .info{text-align:center}
+  .info .num{font-size:4rem;font-weight:300;color:var(--accent);line-height:1;opacity:0.8}
+  .info .title{font-size:1.1rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.75rem;color:var(--muted);letter-spacing:0.06em;margin-top:4px}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="overlay"><div class="info"><div class="num">4</div><div class="title">星座连线</div><div class="hint">靠近星点自动成图 · 挥手旋转星野</div></div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+  rs(); addEventListener('resize', rs);
+
+  // Stars
+  const stars = [];
+  const N = 80;
+  for (let i = 0; i < N; i++) {
+    stars.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: 0.8 + Math.random() * 2.5,
+      brightness: 0.3 + Math.random() * 0.7,
+      twinkle: Math.random() * Math.PI * 2,
+      ts: 0.01 + Math.random() * 0.03,
+    });
+  }
+
+  let mx = -200, my = -200, mot = 0, rotAngle = 0;
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+
+  // Camera → rotation
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject = s; v.play();
+      camOk = true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent = '就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf = null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/400000,1)}
+        pf=f;
+        rotAngle += mot * 0.02;
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  function anim() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#f9f8fb'; ctx.fillRect(0, 0, W, H);
+
+    const cx = W/2, cy = H/2;
+
+    // Draw connection lines between stars near cursor
+    stars.forEach((a, i) => {
+      // Compute rotated position
+      const dxA = a.x - cx, dyA = a.y - cy;
+      const cosR = Math.cos(rotAngle), sinR = Math.sin(rotAngle);
+      const rx = cx + dxA*cosR - dyA*sinR;
+      const ry = cy + dxA*sinR + dyA*cosR;
+
+      // Distance from cursor
+      const distCursor = Math.sqrt((rx-mx)**2 + (ry-my)**2);
+      const cursorInfluence = Math.max(0, 1 - distCursor / 200);
+
+      stars.forEach((b, j) => {
+        if (i >= j) return;
+        const dxB = b.x - cx, dyB = b.y - cy;
+        const rbx = cx + dxB*cosR - dyB*sinR;
+        const rby = cy + dxB*sinR + dyB*cosR;
+        const dist = Math.sqrt((rx-rbx)**2 + (ry-rby)**2);
+
+        // Connect if both near cursor or close to each other
+        const nearA = Math.max(0, 1 - Math.sqrt((rx-mx)**2+(ry-my)**2)/180);
+        const nearB = Math.max(0, 1 - Math.sqrt((rbx-mx)**2+(rby-my)**2)/180);
+        const proximity = Math.max(nearA, nearB, (dist < 100 ? (1-dist/100)*0.4 : 0));
+
+        if (proximity > 0.05) {
+          ctx.beginPath();
+          ctx.moveTo(rx, ry);
+          ctx.lineTo(rbx, rby);
+          ctx.strokeStyle = `rgba(107,92,158,${proximity*0.5})`;
+          ctx.lineWidth = proximity * 1.5;
+          ctx.stroke();
+        }
+      });
+    });
+
+    // Draw stars
+    stars.forEach(a => {
+      const dxA = a.x - cx, dyA = a.y - cy;
+      const cosR = Math.cos(rotAngle), sinR = Math.sin(rotAngle);
+      const rx = cx + dxA*cosR - dyA*sinR;
+      const ry = cy + dxA*sinR + dyA*cosR;
+
+      const distCursor = Math.sqrt((rx-mx)**2 + (ry-my)**2);
+      const brightBoost = Math.max(0, 1 - distCursor/150) * 0.5;
+
+      a.twinkle += a.ts;
+      const b = a.brightness + brightBoost + Math.sin(a.twinkle)*0.15;
+
+      // Glow
+      const grad = ctx.createRadialGradient(rx, ry, 0, rx, ry, a.r*4);
+      grad.addColorStop(0, `rgba(107,92,158,${b})`);
+      grad.addColorStop(1, 'rgba(107,92,158,0)');
+      ctx.beginPath();
+      ctx.arc(rx, ry, a.r*4, 0, Math.PI*2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Core
+      ctx.beginPath();
+      ctx.arc(rx, ry, a.r, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(80,70,130,${b*0.8})`;
+      ctx.fill();
+    });
+
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>折纸 · 第八页</title>
+<style>
+  :root{--bg:#f9f7f2;--text:#4a3c28;--accent:#c4956b;--muted:#b8a080;--paper:#faf7f0;--paper2:#f5f0e5}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none;perspective:1200px}
+  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;padding:60px}
+  .paper{
+    width:120px;height:160px;background:var(--paper);
+    border-radius:2px;
+    box-shadow:0 2px 12px rgba(0,0,0,0.06),0 0 0 1px rgba(0,0,0,0.04);
+    transition:transform 0.5s cubic-bezier(0.4,0,0.2,1),box-shadow 0.5s ease;
+    cursor:pointer;
+    position:relative;
+    overflow:hidden;
+  }
+  .paper::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(135deg,rgba(255,255,255,0.3) 0%,transparent 50%,rgba(0,0,0,0.02) 100%);
+  }
+  .paper .crease{
+    position:absolute;top:0;bottom:0;
+    width:0;border-left:1px dashed rgba(0,0,0,0.08);
+    transition:left 0.3s ease;pointer-events:none;
+  }
+  .paper.folded{transform:rotateY(75deg) scale(0.9);box-shadow:-6px 2px 20px rgba(0,0,0,0.1)}
+  .paper.folded:hover{transform:rotateY(50deg) scale(0.92)}
+  .paper:hover{transform:translateY(-4px) rotateX(3deg);box-shadow:0 8px 24px rgba(0,0,0,0.1)}
+  .info{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:3;text-align:center;pointer-events:none}
+  .info .num{font-size:2.5rem;font-weight:300;color:var(--accent);opacity:0.7;line-height:1}
+  .info .title{font-size:1rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.7rem;color:var(--muted);letter-spacing:0.06em}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<div class="stage" id="stage"></div>
+<div class="info"><div class="num">8</div><div class="title">折纸</div><div class="hint">点击折叠 · 鼠标悬停展开 · 挥手起风</div></div>
+
+<script>
+(() => {
+  const stage = document.getElementById('stage');
+  const ROWS = 3, COLS = 5;
+  const papers = [];
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const el = document.createElement('div');
+      el.className = 'paper';
+      el.innerHTML = `<div class="crease" style="left:${30+r*15+c*5}%"></div>`;
+      el.addEventListener('click', () => {
+        el.classList.toggle('folded');
+      });
+      stage.appendChild(el);
+      papers.push(el);
+    }
+  }
+
+  let mot = 0;
+  // Camera → wave fold
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject = s; v.play();
+      camOk = true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent = '就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf = null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot += (Math.min(d/500000,1)-mot)*0.2}
+        pf=f;
+        // Wave fold based on motion
+        if (mot > 0.3) {
+          const waveIdx = Math.floor(Date.now()*0.005) % papers.length;
+          papers.forEach((p, i) => {
+            const dist = Math.abs(i - waveIdx) % papers.length;
+            const realDist = Math.min(dist, papers.length - dist);
+            if (realDist < Math.ceil(mot*8)) {
+              if (!p.classList.contains('folded')) p.classList.add('folded');
+            }
+          });
+        }
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "交互美学幻灯片",
+  "description": "15 种独立交互体验 — 文字呼吸、涟漪水面、藤蔓生长、星座连线、枯山水、万花筒、光与影、折纸、音流、编织、水彩晕染、钟摆绘迹、云朵成形、磁力诗歌、余晖渐变",
+  "slideCount": 15,
+  "width": 1920,
+  "height": 1080,
+  "aspectRatio": "16:9",
+  "author": "Reasonix Studio",
+  "version": "2.0.0"
+}

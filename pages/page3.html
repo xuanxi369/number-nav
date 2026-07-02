@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>藤蔓生长 · 第三页</title>
+<style>
+  :root{--bg:#e8f0e4;--text:#3d4a30;--accent:#6b8e4e;--muted:#8a9878}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:flex-end;justify-content:center;pointer-events:none;padding-bottom:48px}
+  .info{text-align:center}
+  .info .num{font-size:5rem;font-weight:300;color:var(--accent);line-height:1;opacity:0.85}
+  .info .title{font-size:1.2rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.75rem;color:var(--muted);letter-spacing:0.06em;margin-top:4px}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="overlay"><div class="info"><div class="num">3</div><div class="title">藤蔓生长</div><div class="hint">移动光标让藤蔓追随 · 挥手摇动枝叶</div></div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+  rs(); addEventListener('resize', rs);
+
+  // Vine system — multiple vines growing from bottom
+  const vines = [];
+  const MAX_POINTS = 200;
+
+  function createVine(startX, startY) {
+    return {
+      points: [{x:startX, y:startY, age:0}],
+      leaves: [],
+      color: ['#6b8e4e','#7a9e5a','#8aae68','#5c7e3e'][Math.floor(Math.random()*4)],
+      targetX: startX, targetY: startY,
+      sway: Math.random() * Math.PI * 2,
+    };
+  }
+
+  // Start with vines from bottom
+  for (let i = 0; i < 5; i++) {
+    vines.push(createVine(W * (i+1)/6, H + 10));
+  }
+
+  let mx = W/2, my = H/2, mot = 0;
+
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+
+  // Camera motion
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject = s; v.play();
+      camOk = true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent = '就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf = null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/400000,1)}
+        pf=f; requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  function anim() {
+    ctx.clearRect(0, 0, W, H);
+    // Warm earthy background
+    ctx.fillStyle = '#f6f9f4'; ctx.fillRect(0, 0, W, H);
+
+    vines.forEach((vine, vi) => {
+      // Each vine targets a point influenced by mouse
+      const offsetX = (vi - 2) * 80;
+      vine.targetX = mx + offsetX + Math.sin(Date.now()*0.001 + vi)*30;
+      vine.targetY = Math.max(my - 100 - vi*30, 50);
+
+      // Grow tip toward target
+      const tip = vine.points[vine.points.length-1];
+      const dx = vine.targetX - tip.x, dy = vine.targetY - tip.y;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist > 3 && vine.points.length < MAX_POINTS) {
+        const speed = 2 + mot * 6;
+        vine.points.push({
+          x: tip.x + (dx/dist) * speed,
+          y: tip.y + (dy/dist) * speed,
+          age: 0
+        });
+      }
+
+      // Age all points
+      vine.points.forEach(p => p.age++);
+
+      // Prune old points
+      while (vine.points.length > 60 && vine.points[0].age > 80) vine.points.shift();
+
+      // Add leaves along stem
+      if (vine.points.length > 10 && Math.random() < 0.03 + mot*0.05) {
+        const idx = Math.floor(Math.random() * (vine.points.length-5)) + 5;
+        const p = vine.points[idx];
+        vine.leaves.push({
+          x: p.x, y: p.y,
+          size: 3 + Math.random() * 8,
+          rot: (Math.random() - 0.5) * Math.PI,
+          life: 1,
+        });
+      }
+
+      // Draw vine stem
+      if (vine.points.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(vine.points[0].x, vine.points[0].y);
+        for (let i = 1; i < vine.points.length; i++) {
+          const p = vine.points[i];
+          // Sway from gesture
+          const swayX = Math.sin(p.age*0.05 + vine.sway + Date.now()*0.002) * mot * 8;
+          ctx.lineTo(p.x + swayX, p.y);
+        }
+        ctx.strokeStyle = vine.color;
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      // Draw leaves
+      vine.leaves.forEach((l, i) => {
+        l.life -= 0.003;
+        if (l.life <= 0) { vine.leaves.splice(i,1); return; }
+        ctx.save();
+        ctx.translate(l.x + Math.sin(Date.now()*0.003+i)*mot*6, l.y);
+        ctx.rotate(l.rot);
+        ctx.globalAlpha = l.life;
+        ctx.fillStyle = '#8aae68';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, l.size, l.size*0.45, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+      // Prune old leaves
+      if (vine.leaves.length > 30) vine.leaves.splice(0, vine.leaves.length-30);
+    });
+
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+</script>
+</body>
+</html>

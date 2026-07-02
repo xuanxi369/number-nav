@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>余晖渐变 · 第十五页</title>
+<style>
+  :root{--bg:#faf6f0;--text:#5a4830;--accent:#d4a060;--muted:#b89870}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .info{text-align:center}
+  .info .num{font-size:7rem;font-weight:300;
+    background:linear-gradient(135deg,#d4a060,#e0b878,#f0c890);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    line-height:1;transition:transform 3s ease}
+  .info .num.pulse{transform:scale(1.08)}
+  .info .title{font-size:1.3rem;letter-spacing:0.1em;color:var(--text)}
+  .info .hint{font-size:0.75rem;color:var(--muted);letter-spacing:0.08em;margin-top:6px}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="overlay"><div class="info"><div class="num" id="numEl">15</div><div class="title">余晖渐变</div><div class="hint">光标移动改变色温 · 深呼吸</div></div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  const numEl = document.getElementById('numEl');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+  rs(); addEventListener('resize', rs);
+
+  let mx = W/2, my = H/2, mot = 0;
+  let breathPhase = 0;
+
+  document.addEventListener('mousemove', e => {
+    mx += (e.clientX - mx) * 0.05;
+    my += (e.clientY - my) * 0.05;
+  });
+
+  // Camera influences breathing depth
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject=s; v.play();
+      camOk=true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent='就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf=null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot += (Math.min(d/500000,1)-mot)*0.2}
+        pf=f; requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  function anim() {
+    breathPhase += 0.003 + mot * 0.015;
+    const breathe = Math.sin(breathPhase); // -1 to 1 breathing cycle
+    const breatheNorm = (breathe + 1) / 2; // 0 to 1
+
+    // Mouse position shifts the color temperature
+    const warmShift = my / H; // bottom = warmer, top = cooler
+    const hueShift = mx / W; // left = cooler, right = warmer
+
+    // Gradient colors that breathe
+    const r1 = 240 + Math.floor(warmShift * 15) + Math.floor(breathe * 8);
+    const g1 = 230 - Math.floor(hueShift * 20) + Math.floor(breathe * 5);
+    const b1 = 210 - Math.floor(warmShift * 25);
+
+    const r2 = 255 - Math.floor((1-warmShift) * 10) + Math.floor(breathe * 5);
+    const g2 = 240 - Math.floor((1-hueShift) * 15);
+    const b2 = 225 + Math.floor(warmShift * 15) + Math.floor(breathe * 10);
+
+    // Draw breathing gradient
+    const grad = ctx.createRadialGradient(
+      W/2 + Math.sin(breathPhase*1.3)*W*0.1,
+      H/2 + Math.cos(breathPhase)*H*0.1,
+      0,
+      W/2, H/2,
+      Math.max(W,H) * (0.6 + breatheNorm * 0.3)
+    );
+    grad.addColorStop(0, `rgb(${r1},${g1},${b1})`);
+    grad.addColorStop(0.5, `rgb(${(r1+r2)/2},${(g1+g2)/2},${(b1+b2)/2})`);
+    grad.addColorStop(1, `rgb(${r2},${g2},${b2})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle vignette
+    const vignette = ctx.createRadialGradient(W/2, H/2, Math.max(W,H)*0.4, W/2, H/2, Math.max(W,H)*0.9);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.04)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    // Pulse the number
+    if (breathe > 0.7) numEl.classList.add('pulse');
+    else numEl.classList.remove('pulse');
+
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+</script>
+</body>
+</html>

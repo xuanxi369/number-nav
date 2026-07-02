@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>枯山水 · 第五页</title>
+<style>
+  :root{--bg:#f5f0e8;--text:#4a3c28;--accent:#9b7d5c;--muted:#b8a080}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Cormorant Garamond","Noto Serif SC","Georgia",serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;user-select:none}
+  canvas{position:fixed;top:0;left:0;z-index:0}
+  .overlay{position:fixed;inset:0;z-index:1;display:flex;align-items:flex-end;justify-content:flex-end;pointer-events:none;padding:40px}
+  .info{text-align:right}
+  .info .num{font-size:5rem;font-weight:300;color:var(--accent);line-height:1;opacity:0.7}
+  .info .title{font-size:1.2rem;letter-spacing:0.08em}
+  .info .hint{font-size:0.75rem;color:var(--muted);letter-spacing:0.06em;margin-top:4px}
+  .back{position:fixed;top:28px;left:32px;z-index:10;font-size:0.9rem;color:var(--muted);text-decoration:none;transition:color 0.3s;letter-spacing:0.05em}
+  .back:hover{color:var(--accent)}
+  .cam-dot{position:fixed;top:28px;right:32px;z-index:10;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted)}
+  .cam-dot::before{content:"";width:7px;height:7px;border-radius:50%;background:#ccc;transition:background 0.5s}
+  .cam-dot.live::before{background:#8cc9a0}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← 目录</a>
+<div class="cam-dot" id="cam">待命</div>
+<canvas id="c"></canvas>
+<div class="overlay"><div class="info"><div class="num">5</div><div class="title">枯山水</div><div class="hint">滑动鼠标耙沙 · 挥手抚平</div></div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W, H;
+  function rs(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;canvas.width=W;canvas.height=H;initSand()}
+  rs(); addEventListener('resize', rs);
+
+  let sandData; // ImageData for pixel-level sand
+
+  function initSand() {
+    // Base sand color with noise
+    ctx.fillStyle = '#e8dcc8'; ctx.fillRect(0, 0, W, H);
+    // Add grain texture
+    const imgData = ctx.getImageData(0, 0, W, H);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const noise = (Math.random() - 0.5) * 18;
+      d[i] = Math.min(255, Math.max(0, 232 + noise));
+      d[i+1] = Math.min(255, Math.max(0, 220 + noise));
+      d[i+2] = Math.min(255, Math.max(0, 200 + noise));
+    }
+    ctx.putImageData(imgData, 0, 0);
+    sandData = ctx.getImageData(0, 0, W, H);
+  }
+
+  let mx = -200, my = -200, pmx = -200, pmy = -200, mot = 0;
+  let isDrawing = false;
+
+  document.addEventListener('mousemove', e => {
+    pmx = mx; pmy = my;
+    mx = e.clientX; my = e.clientY;
+    isDrawing = true;
+  });
+  document.addEventListener('mousedown', () => { isDrawing = true; });
+  document.addEventListener('mouseup', () => { isDrawing = false; });
+  document.addEventListener('mouseleave', () => { isDrawing = false; });
+
+  // Camera → reset gesture
+  let camOk = false;
+  async function initCam() { if (window.self !== window.top) { console.log("在iframe中，跳过摄像头初始化"); return; }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{width:160,height:120,facingMode:'user'}});
+      const v = document.createElement('video'); v.srcObject = s; v.play();
+      camOk = true; document.getElementById('cam').classList.add('live'); document.getElementById('cam').textContent = '就绪';
+      const oc = document.createElement('canvas'); oc.width=160; oc.height=120;
+      const octx = oc.getContext('2d',{willReadFrequently:true}); let pf = null;
+      (function det(){
+        if(!camOk)return;
+        if(v.readyState<2){requestAnimationFrame(det);return}
+        octx.drawImage(v,0,0,160,120);
+        const f=octx.getImageData(0,0,160,120);
+        if(pf){let d=0;for(let i=0;i<f.data.length;i+=16)d+=Math.abs(f.data[i]-pf.data[i]);mot=Math.min(d/500000,1)}
+        pf=f;
+        // Big gesture → smooth over a random area
+        if (mot > 0.5) {
+          smoothArea(Math.random()*W, Math.random()*H, 80 + mot*120);
+        }
+        requestAnimationFrame(det);
+      })();
+    } catch(e) { document.getElementById('cam').textContent = '未授权'; }
+  }
+  initCam();
+
+  function smoothArea(cx, cy, radius) {
+    if (!sandData) return;
+    const d = sandData.data;
+    const r2 = radius * radius;
+    const startX = Math.max(0, Math.floor(cx - radius));
+    const endX = Math.min(W, Math.ceil(cx + radius));
+    const startY = Math.max(0, Math.floor(cy - radius));
+    const endY = Math.min(H, Math.ceil(cy + radius));
+
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
+        if ((x-cx)**2 + (y-cy)**2 > r2) continue;
+        const idx = (y*W + x) * 4;
+        const base = 220 + (Math.random()-0.5)*10;
+        d[idx] = Math.min(255, d[idx]*0.7 + base*0.3);
+        d[idx+1] = Math.min(255, d[idx+1]*0.7 + (base-10)*0.3);
+        d[idx+2] = Math.min(255, d[idx+2]*0.7 + (base-25)*0.3);
+      }
+    }
+    ctx.putImageData(sandData, 0, 0);
+  }
+
+  function rakeTrail(x1, y1, x2, y2) {
+    if (!sandData) return;
+    const steps = Math.ceil(Math.sqrt((x2-x1)**2 + (y2-y1)**2));
+    for (let s = 0; s <= steps; s++) {
+      const t = s/steps;
+      const rx = x1 + (x2-x1)*t;
+      const ry = y1 + (y2-y1)*t;
+      // Rake lines perpendicular to movement
+      const angle = Math.atan2(y2-y1, x2-x1) + Math.PI/2;
+      for (let l = -3; l <= 3; l++) {
+        const lx = rx + Math.cos(angle)*l*5;
+        const ly = ry + Math.sin(angle)*l*5;
+        if (lx < 0 || lx >= W || ly < 0 || ly >= H) continue;
+        const idx = (Math.floor(ly)*W + Math.floor(lx)) * 4;
+        if (idx >= 0 && idx < sandData.data.length - 3) {
+          sandData.data[idx] = Math.min(255, sandData.data[idx] + 18);
+          sandData.data[idx+1] = Math.min(255, sandData.data[idx+1] + 15);
+          sandData.data[idx+2] = Math.min(255, sandData.data[idx+2] + 10);
+        }
+      }
+    }
+  }
+
+  function anim() {
+    if (isDrawing && mx > 0 && pmx > 0) {
+      rakeTrail(pmx, pmy, mx, my);
+      ctx.putImageData(sandData, 0, 0);
+    }
+    pmx = mx; pmy = my;
+    if (!isDrawing && Math.random() < 0.02) isDrawing = true; // keep last pos
+
+    requestAnimationFrame(anim);
+  }
+  initSand();
+  anim();
+})();
+</script>
+</body>
+</html>
