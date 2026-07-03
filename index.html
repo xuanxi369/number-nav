@@ -379,7 +379,7 @@
 <body>
   <div class="carousel-3d" id="carousel3d"></div>
 
-  <!-- 导航按钮 -->
+   
   <button class="nav-btn prev" id="prevBtn" aria-label="上一页">
     <svg viewBox="0 0 24 24"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
   </button>
@@ -662,7 +662,8 @@
     })();
   </script>
 </body>
-</html> -->
+</html> 
+-->
 
 
 
@@ -1095,8 +1096,14 @@
       function getRadius() {
         const isLandscape = window.innerWidth > window.innerHeight;
         const isPhoneLandscape = isLandscape && window.innerHeight <= 500;
+        const isPhonePortrait = !isLandscape && window.innerWidth <= 768;
         if (isPhoneLandscape) {
           return 800; // 手机横屏：更小的半径，卡片更紧凑
+        }
+        if (isPhonePortrait) {
+          // 竖屏手机：卡片本身因保持横屏比例而变矮，半径按屏幕高度动态缩小，
+          // 让上一张/下一张卡片露出在中心卡片上下方，凑成三张卡片的观感，不留大片空白
+          return Math.max(380, Math.min(650, Math.round(window.innerHeight * 0.6)));
         }
         return 1400; // 默认半径
       }
@@ -1200,23 +1207,25 @@
         tr = cr - di * theta;
       }
 
-      // 按钮导航
-      // 上箭头按钮 - 向上滚动（显示下一张）
+      // 按钮导航（方向与键盘方向键保持一致：上=上一张，下=下一张）
       document.getElementById('prevBtn').onclick = () => {
         const nr = ((cr % 360) + 360) % 360;
         const ci = getCI(nr);
-        rt((ci + 1) % N);  // 修正：向上滚动显示下一张
+        rt((ci - 1 + N) % N); // 上一张
       };
 
-      // 下箭头按钮 - 向下滚动（显示上一张）
       document.getElementById('nextBtn').onclick = () => {
         const nr = ((cr % 360) + 360) % 360;
         const ci = getCI(nr);
-        rt((ci - 1 + N) % N);  // 修正：向下滚动显示上一张
+        rt((ci + 1) % N); // 下一张
       };
 
-      // 鼠标拖拽
+      // 判断触摸/鼠标事件是否发生在按钮等控件上，避免拖拽逻辑与按钮点击相互干扰
+      const isControlTarget = target => !!(target && target.closest && target.closest('.nav-btn'));
+
+      // 鼠标拖拽（方向：向下拖 = 下一张，向上拖 = 上一张，与键盘一致）
       document.addEventListener('mousedown', e => {
+        if (isControlTarget(e.target)) return;
         drag = true;
         sy = e.clientY;
         sr = cr;
@@ -1225,7 +1234,7 @@
 
       document.addEventListener('mousemove', e => {
         if (!drag) return;
-        cr = sr + (e.clientY - sy) * 0.2;
+        cr = sr - (e.clientY - sy) * 0.2;
         tr = cr;
         upd();
       });
@@ -1244,16 +1253,20 @@
         tr = cr + d;
       });
 
-      // 触摸拖拽（原有功能 - 连续旋转）
+      // 触摸拖拽（方向：向下滑 = 下一张，向上滑 = 上一张，与键盘/按钮一致）
       let touchStartY = 0;
       let touchStartTime = 0;
       let isTouchDrag = false;
-      
+      let touchOnControl = false;
+
       document.addEventListener('touchstart', e => {
+        touchOnControl = isControlTarget(e.target);
+        if (touchOnControl) return; // 交给按钮自己的 click 处理，不参与拖拽/滑动逻辑
+
         touchStartY = e.touches[0].clientY;
         touchStartTime = Date.now();
         isTouchDrag = false;
-        
+
         drag = true;
         sy = e.touches[0].clientY;
         sr = cr;
@@ -1261,44 +1274,45 @@
       }, { passive: true });
 
       document.addEventListener('touchmove', e => {
-        if (!drag) return;
-        
+        if (!drag || touchOnControl) return;
+
         const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
-        
+
         // 如果移动距离超过10px，认为是拖拽
         if (deltaY > 10) {
           isTouchDrag = true;
         }
-        
-        cr = sr + (e.touches[0].clientY - sy) * 0.2;
+
+        cr = sr - (e.touches[0].clientY - sy) * 0.2;
         tr = cr;
         upd();
       }, { passive: true });
 
       document.addEventListener('touchend', e => {
+        if (touchOnControl) { touchOnControl = false; return; }
         if (!drag) return;
         drag = false;
         carousel.classList.remove('dragging');
         prevC = -1;
-        
+
         const touchEndY = e.changedTouches[0].clientY;
         const touchDuration = Date.now() - touchStartTime;
         const deltaY = touchEndY - touchStartY;
-        
+
         // 判断是快速滑动还是拖拽
         const isSwipe = !isTouchDrag && touchDuration < 300 && Math.abs(deltaY) > 50;
-        
+
         if (isSwipe) {
-          // 快速滑动 - 切换到下一张/上一张
+          // 快速滑动 - 切换到下一张/上一张（与键盘方向键一致）
           const nr = ((cr % 360) + 360) % 360;
           const ci = getCI(nr);
-          
+
           if (deltaY > 0) {
-            // 向下滑动 - 显示上一张
-            rt((ci - 1 + N) % N);
-          } else {
-            // 向上滑动 - 显示下一张
+            // 向下滑动 - 显示下一张
             rt((ci + 1) % N);
+          } else {
+            // 向上滑动 - 显示上一张
+            rt((ci - 1 + N) % N);
           }
         } else {
           // 拖拽 - 吸附到最近的卡片
@@ -1331,6 +1345,13 @@
         const ci = getCI(nr);
         if (e.key === 'ArrowUp') rt((ci - 1 + N) % N);
         if (e.key === 'ArrowDown') rt((ci + 1) % N);
+      });
+
+      // 防止桌面端点击中心卡片里的 iframe 后，焦点被 iframe 抢走导致键盘方向键失灵
+      window.addEventListener('blur', () => {
+        if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+          window.focus();
+        }
       });
     })();
   </script>
